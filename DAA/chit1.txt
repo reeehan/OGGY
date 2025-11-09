@@ -1,0 +1,20 @@
+# Fibonacci Iterative (Non-Recursive)
+def fib_iterative(n):
+    a, b = 0, 1
+    result = []
+    for _ in range(n):
+        result.append(a)
+        a, b = b, a + b
+    return result
+
+n = 6
+print("Iterative Fibonacci:", fib_iterative(n))
+# Fibonacci Recursive
+def fib_recursive(n):
+    if n <= 1:
+        return n
+    else:
+        return fib_recursive(n-1) + fib_recursive(n-2)
+
+n = 6
+print("Recursive Fibonacci:", [fib_recursive(i) for i in range(n)])

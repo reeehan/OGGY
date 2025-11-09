@@ -1,0 +1,11 @@
+def solve(Q, n):
+    if len(Q) == n:
+        for i in range(n):
+            print(' '.join('1' if Q[i] == j else '0' for j in range(n)))
+        print()  # blank line between solutions
+        return
+    for c in range(n):
+        if c not in Q and all(abs(c - x) != len(Q) - i for i, x in enumerate(Q)):
+            solve(Q + [c], n)
+
+solve([], 4)

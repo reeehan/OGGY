@@ -1,0 +1,15 @@
+import heapq
+
+s = "Hello"
+f = {ch: s.count(ch) for ch in set(s)}
+h = [[w, [ch, ""]] for ch, w in f.items()]
+heapq.heapify(h)
+
+while len(h) > 1:
+    a, b = heapq.heappop(h), heapq.heappop(h)
+    for p in a[1:]: p[1] = '0' + p[1]
+    for p in b[1:]: p[1] = '1' + p[1]
+    heapq.heappush(h, [a[0] + b[0]] + a[1:] + b[1:])
+
+codes = dict(sorted(heapq.heappop(h)[1:]))
+print("Huffman Codes:", codes)

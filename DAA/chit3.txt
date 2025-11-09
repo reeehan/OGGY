@@ -1,0 +1,18 @@
+# Fractional Knapsack using Greedy Strategy
+def knap(W, wt, val):
+    ratio = sorted([(v / w, w) for v, w in zip(val, wt)], reverse=True)
+    profit = 0
+    for r, w in ratio:
+        if W >= w:
+            W -= w
+            profit += r * w
+        else:
+            profit += r * W
+            break
+    return profit
+
+val = [60, 100, 120]
+wt = [10, 20, 30]
+W = 50
+
+print("Maximum Profit:", knap(W, wt, val))
