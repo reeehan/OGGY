@@ -1,0 +1,55 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+/// @title EVotingMinimal - Very small registered-voter voting contract
+contract EVotingMinimal is Ownable {
+    constructor() Ownable(msg.sender) {}
+
+    struct Election {
+        string name;
+        uint256 options; // number of choices (0..options-1)
+        bool exists;
+    }
+
+    mapping(uint256 => Election) public elections;
+    mapping(uint256 => mapping(address => bool)) public registered;
+    mapping(uint256 => mapping(address => bool)) public voted;
+    mapping(uint256 => mapping(uint256 => uint256)) public counts;
+
+    event ElectionCreated(uint256 indexed id, string name, uint256 options);
+    event VoterRegistered(uint256 indexed id, address voter);
+    event VoteCast(uint256 indexed id, address voter, uint256 option);
+
+    /// @notice Owner creates an election
+    function createElection(uint256 id, string calldata name, uint256 options) external onlyOwner {
+        require(!elections[id].exists, "exists");
+        require(options >= 2, "options>=2");
+        elections[id] = Election({name: name, options: options, exists: true});
+        emit ElectionCreated(id, name, options);
+    }
+
+    /// @notice Owner registers a voter for an election
+    function registerVoter(uint256 id, address voter) external onlyOwner {
+        require(elections[id].exists, "no election");
+        registered[id][voter] = true;
+        emit VoterRegistered(id, voter);
+    }
+
+    /// @notice Registered voter casts one vote (option indexed from 0)
+    function vote(uint256 id, uint256 option) external {
+        require(elections[id].exists, "no election");
+        require(registered[id][msg.sender], "not registered");
+        require(!voted[id][msg.sender], "already voted");
+        require(option < elections[id].options, "invalid option");
+        voted[id][msg.sender] = true;
+        counts[id][option] += 1;
+        emit VoteCast(id, msg.sender, option);
+    }
+
+    /// @notice View votes for an option
+    function getCount(uint256 id, uint256 option) external view returns (uint256) {
+        return counts[id][option];
+    }
+}

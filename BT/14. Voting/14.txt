@@ -1,0 +1,141 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+/// @title EVoting - Decentralized voting system using commit-reveal mechanism
+/// @notice Owner creates elections and registers voters; voters commit and reveal securely.
+/// @dev Compatible with OpenZeppelin v5.x
+
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+
+contract EVoting is Ownable, ReentrancyGuard {
+    constructor() Ownable(msg.sender) {} // ✅ FIX: pass initialOwner to base constructor
+
+    struct Election {
+        string name;
+        uint256 startCommit;
+        uint256 endCommit;
+        uint256 startReveal;
+        uint256 endReveal;
+        uint8 options;
+        bool exists;
+        bool finalized;
+    }
+
+    mapping(uint256 => Election) public elections;
+    mapping(uint256 => mapping(address => bool)) public registered;
+    mapping(uint256 => mapping(address => bool)) public committed;
+    mapping(uint256 => mapping(address => bool)) public revealed;
+    mapping(uint256 => mapping(address => bytes32)) private commits;
+    mapping(uint256 => mapping(uint8 => uint256)) public counts;
+    mapping(uint256 => uint256) public totalRevealed;
+
+    event ElectionCreated(
+        uint256 indexed electionId,
+        string name,
+        uint256 startCommit,
+        uint256 endCommit,
+        uint256 startReveal,
+        uint256 endReveal,
+        uint8 options
+    );
+    event VoterRegistered(uint256 indexed electionId, address indexed voter);
+    event VoteCommitted(uint256 indexed electionId, address indexed voter, bytes32 commitHash);
+    event VoteRevealed(uint256 indexed electionId, address indexed voter, uint8 option);
+    event ElectionFinalized(uint256 indexed electionId);
+
+    // -------------------------------
+    // Owner Functions
+    // -------------------------------
+
+    function createElection(
+        uint256 electionId,
+        string calldata name,
+        uint256 startCommit,
+        uint256 endCommit,
+        uint256 startReveal,
+        uint256 endReveal,
+        uint8 options
+    ) external onlyOwner {
+        require(!elections[electionId].exists, "Election exists");
+        require(startCommit < endCommit, "Invalid commit window");
+        require(endCommit < startReveal, "Reveal must start after commit");
+        require(startReveal < endReveal, "Invalid reveal window");
+        require(options >= 2, "At least two options");
+
+        elections[electionId] = Election({
+            name: name,
+            startCommit: startCommit,
+            endCommit: endCommit,
+            startReveal: startReveal,
+            endReveal: endReveal,
+            options: options,
+            exists: true,
+            finalized: false
+        });
+
+        emit ElectionCreated(electionId, name, startCommit, endCommit, startReveal, endReveal, options);
+    }
+
+    function registerVoter(uint256 electionId, address voter) external onlyOwner {
+        require(elections[electionId].exists, "No such election");
+        registered[electionId][voter] = true;
+        emit VoterRegistered(electionId, voter);
+    }
+
+    function finalizeElection(uint256 electionId) external onlyOwner {
+        Election storage e = elections[electionId];
+        require(block.timestamp > e.endReveal, "Reveal not over");
+        require(!e.finalized, "Already finalized");
+        e.finalized = true;
+        emit ElectionFinalized(electionId);
+    }
+
+    // -------------------------------
+    // Voter Functions
+    // -------------------------------
+
+    function commitVote(uint256 electionId, bytes32 commitHash) external nonReentrant {
+        Election memory e = elections[electionId];
+        require(e.exists, "Invalid election");
+        require(block.timestamp >= e.startCommit && block.timestamp <= e.endCommit, "Not in commit phase");
+        require(registered[electionId][msg.sender], "Not registered");
+        require(!committed[electionId][msg.sender], "Already committed");
+
+        commits[electionId][msg.sender] = commitHash;
+        committed[electionId][msg.sender] = true;
+
+        emit VoteCommitted(electionId, msg.sender, commitHash);
+    }
+
+    function revealVote(uint256 electionId, uint8 option, bytes32 salt) external nonReentrant {
+        Election storage e = elections[electionId];
+        require(e.exists, "Invalid election");
+        require(block.timestamp >= e.startReveal && block.timestamp <= e.endReveal, "Not in reveal phase");
+        require(committed[electionId][msg.sender], "No commit found");
+        require(!revealed[electionId][msg.sender], "Already revealed");
+        require(!e.finalized, "Election finalized");
+        require(option < e.options, "Invalid option");
+
+        bytes32 recomputed = keccak256(abi.encodePacked(option, salt));
+        require(recomputed == commits[electionId][msg.sender], "Commit mismatch");
+
+        revealed[electionId][msg.sender] = true;
+        counts[electionId][option]++;
+        totalRevealed[electionId]++;
+
+        emit VoteRevealed(electionId, msg.sender, option);
+    }
+
+    // -------------------------------
+    // View Functions
+    // -------------------------------
+
+    function getCount(uint256 electionId, uint8 option) external view returns (uint256) {
+        return counts[electionId][option];
+    }
+
+    function computeCommitHash(uint8 option, bytes32 salt) external pure returns (bytes32) {
+        return keccak256(abi.encodePacked(option, salt));
+    }
+}
